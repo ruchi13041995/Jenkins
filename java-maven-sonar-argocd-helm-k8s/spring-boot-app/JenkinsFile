@@ -2,7 +2,7 @@ pipeline {
   agent {
     docker {
        image 'ruchi134/jenkins-agent:v1'
-       args '--network host -v /var/run/docker.sock:/var/run/docker.sock'   // mount Docker socket to access the host's Docker daemon
+       args '--user root --network host -v /var/run/docker.sock:/var/run/docker.sock'   // mount Docker socket to access the host's Docker daemon
     }
   }
   stages {
