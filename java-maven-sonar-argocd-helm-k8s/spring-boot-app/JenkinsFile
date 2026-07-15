@@ -1,7 +1,7 @@
 pipeline {
   agent {
     docker {
-       image 'maven:3.9.9-eclipse-temurin-17'
+       image 'ruchi134/jenkins-agent:v1'
        args '--network host -v /var/run/docker.sock:/var/run/docker.sock'   // mount Docker socket to access the host's Docker daemon
     }
   }
