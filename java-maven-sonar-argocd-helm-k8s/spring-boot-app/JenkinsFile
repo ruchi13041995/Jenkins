@@ -52,11 +52,12 @@ pipeline {
         }
         steps {
             checkout scm
-            
+
             withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                 sh '''
                     pwd
                     ls -la
+                    git config --global --add safe.directory /var/jenkins_home/workspace/ultimate-demo
                     git rev-parse --show-toplevel
                     git config user.email "ruchitagholap13@gmail.com"
                     git config user.name "ruchi13041995"
