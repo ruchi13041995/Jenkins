@@ -1,74 +1,167 @@
 pipeline {
-  agent {
-    docker {
-       image 'ruchi134/jenkins-agent:v1'
-       args '--user root --network host -v /var/run/docker.sock:/var/run/docker.sock'   // mount Docker socket to access the host's Docker daemon
-    }
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        sh 'echo passed'
-        git branch: 'main', url: 'https://github.com/ruchi13041995/Jenkins.git'
-      }
-    }
-    stage('Build and Test') {
-      steps {
-        sh 'ls -ltr'
-        // build the project and create a JAR file
-        sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
-      }
-    }
-    stage('Static Code Analysis') {
-      environment {
-        SONAR_URL = "http://host.docker.internal:9000"
-      }
-      steps {
-        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=${SONAR_URL}'
-        }
-      }
-    }
-    stage('Build and Push Docker Image') {
-      environment {
-        DOCKER_IMAGE = "ruchi134/ultimate-cicd:${BUILD_NUMBER}"
-        // DOCKERFILE_LOCATION = "java-maven-sonar-argocd-helm-k8s/spring-boot-app/Dockerfile"
-        REGISTRY_CREDENTIALS = credentials('docker-cred')
-      }
-      steps {
-        script {
-            sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
-            def dockerImage = docker.image("${DOCKER_IMAGE}")
-            docker.withRegistry('https://index.docker.io/v1/', "docker-cred") {
-                dockerImage.push()
-            }
-        }
-      }
-    }
-    stage('Update Deployment File') {
-        environment {
-            GIT_REPO_NAME = "Jenkins"
-            GIT_USER_NAME = "ruchi13041995"
-        }
-        steps {
-            checkout scm
 
-            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                sh '''
-                    pwd
-                    ls -la
-                    git config --global --add safe.directory /var/jenkins_home/workspace/ultimate-demo
-                    git rev-parse --show-toplevel
-                    git config user.email "ruchitagholap13@gmail.com"
-                    git config user.name "ruchi13041995"
-                    BUILD_NUMBER=${BUILD_NUMBER}
-                    sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-                    git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-                '''
+    // Run the complete pipeline inside our custom Docker agent.
+    // This image contains Java, Maven, Git, Docker CLI, and Curl.
+    agent {
+        docker {
+            image 'ruchi134/jenkins-agent:v1'
+
+            // Run as root so the agent can access the Docker socket.
+            // Host network is used so the container can reach SonarQube running on Windows.
+            args '--user root --network host -v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    // Common values used in multiple pipeline stages.
+    environment {
+        // GitHub repository containing source code and Kubernetes manifests.
+        REPOSITORY_URL = 'https://github.com/ruchi13041995/Jenkins.git'
+
+        // Spring Boot application folder.
+        APP_DIR = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app'
+
+        // Kubernetes deployment manifest updated after every successful image build.
+        MANIFEST_FILE = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml'
+
+        // SonarQube is running directly on the Windows host.
+        SONAR_URL = 'http://host.docker.internal:9000'
+
+        // Every Docker image gets the Jenkins build number as its tag.
+        DOCKER_IMAGE = "ruchi134/ultimate-cicd:${BUILD_NUMBER}"
+
+        // GitHub details used while pushing the updated manifest.
+        GIT_USER_NAME = 'ruchi13041995'
+        GIT_REPO_NAME = 'Jenkins'
+    }
+
+    stages {
+
+        stage('Checkout Source Code') {
+            steps {
+                // Clone the latest code from the main branch.
+                git branch: 'main',
+                    url: "${REPOSITORY_URL}"
+            }
+        }
+
+        stage('Build and Test Application') {
+            steps {
+                // Move into the application folder.
+                dir("${APP_DIR}") {
+
+                    // Delete old build files, compile the code,
+                    // run tests, and create the JAR file.
+                    sh 'mvn clean package'
+                }
+            }
+        }
+
+        stage('SonarQube Code Analysis') {
+            steps {
+                dir("${APP_DIR}") {
+
+                    // Read the SonarQube token securely from Jenkins credentials.
+                    withCredentials([
+                        string(
+                            credentialsId: 'sonarqube',
+                            variable: 'SONAR_AUTH_TOKEN'
+                        )
+                    ]) {
+
+                        // Send the source code to SonarQube for static analysis.
+                        sh '''
+                            mvn sonar:sonar \
+                            -Dsonar.token=$SONAR_AUTH_TOKEN \
+                            -Dsonar.host.url=$SONAR_URL
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir("${APP_DIR}") {
+
+                    // Build the application Docker image.
+                    // Example image tag:
+                    // ruchi134/ultimate-cicd:25
+                    sh 'docker build -t $DOCKER_IMAGE .'
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+
+                    // Log in to Docker Hub using Jenkins credentials.
+                    docker.withRegistry(
+                        'https://index.docker.io/v1/',
+                        'docker-cred'
+                    ) {
+
+                        // Push the newly created Docker image to Docker Hub.
+                        docker.image("${DOCKER_IMAGE}").push()
+                    }
+                }
+            }
+        }
+
+        stage('Update Kubernetes Manifest') {
+            steps {
+
+                // Read the GitHub Personal Access Token securely.
+                withCredentials([
+                    string(
+                        credentialsId: 'github',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+
+                    sh '''
+                        # Trust the Jenkins workspace because the files
+                        # may have a different Linux owner inside the agent.
+                        git config --global --add safe.directory "$WORKSPACE"
+
+                        # Configure the Git user used for the automated commit.
+                        git config user.email "ruchitagholap13@gmail.com"
+                        git config user.name "$GIT_USER_NAME"
+
+                        # Replace the existing Docker image tag
+                        # with the current Jenkins build number.
+                        sed -i -E \
+                        "s|(image:[[:space:]]*ruchi134/ultimate-cicd:).*|\\1${BUILD_NUMBER}|" \
+                        "$MANIFEST_FILE"
+
+                        # Stage the updated Kubernetes manifest.
+                        git add "$MANIFEST_FILE"
+
+                        # Commit the new image version.
+                        git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+
+                        # Push the updated manifest to GitHub.
+                        # ArgoCD will detect this Git change and deploy it.
+                        git push \
+                        "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" \
+                        HEAD:main
+                    '''
+                }
             }
         }
     }
-  }
+
+    post {
+
+        success {
+            // Display a simple success message after all stages complete.
+            echo "Pipeline completed successfully."
+            echo "Docker image created: ${DOCKER_IMAGE}"
+        }
+
+        failure {
+            // Display a simple failure message if any stage fails.
+            echo "Pipeline failed. Check the failed stage logs."
+        }
+    }
 }
