@@ -7,6 +7,7 @@ ARG artifact=target/spring-boot-web.jar
 
 WORKDIR /opt/app
 
+#Copy artifacts from taget to app.jar
 COPY ${artifact} app.jar
 
 # This should not be changed
