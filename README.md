@@ -138,6 +138,9 @@ Starting from a developer's code commit, the pipeline automatically:
 - 
   <img width="1028" height="100" alt="image" src="https://github.com/user-attachments/assets/c76c53fe-5546-463c-8761-3e47c5350cab" />
 
+  <img width="1364" height="273" alt="image" src="https://github.com/user-attachments/assets/2e398801-d51e-4bfb-afcb-1bdae8f79353" />
+
+
 - 📌 SonarQube Dashboard
 
   <img width="921" height="177" alt="image" src="https://github.com/user-attachments/assets/6139587d-d444-4f9b-a962-e73a502aece3" />
