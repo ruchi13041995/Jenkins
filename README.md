@@ -161,17 +161,6 @@ Starting from a developer's code commit, the pipeline automatically:
 
 
 ---  
-# 🚀 Future Enhancements
-
-- 🔐 Trivy Image Scanning
-- 📊 Prometheus & Grafana Monitoring
-- ☁️ Deploy on AWS EKS
-- 📦 Helm Charts
-- 🔔 Slack/Email Notifications
-- 🧪 Automated Integration Tests
-- 🌍 Multi-Environment Deployment (Dev / QA / Prod)
-
----
 
 # 🎯 Learning Outcomes
 
